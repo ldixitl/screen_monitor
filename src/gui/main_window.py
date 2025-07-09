@@ -37,7 +37,7 @@ class MainWindow(QMainWindow):
             # Настройки
             self.telegram_queue = deque(maxlen=10)
             self.telegram_enabled = False
-            self.env_path = "../../.env"
+            self.env_path = ".env"
             logger.debug(f"Загрузка настроек из файла: {self.env_path}")
             self.current_settings = load_env_settings(self.env_path)
 
