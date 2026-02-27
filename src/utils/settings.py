@@ -3,26 +3,46 @@ import os
 from dotenv import dotenv_values, load_dotenv, set_key
 
 
-def load_env_settings(env_path):
-    """Загружает настройки из .env файла или создает его"""
+def load_env_settings(env_path: str) -> dict:
+    """
+    Загружает настройки из .env файла. Если файл отсутствует, создаёт его
+    с набором значений по умолчанию.
+
+    :param env_path: Путь к файлу .env (строка).
+    :return: Словарь с загруженными настройками.
+    """
     if not os.path.exists(env_path):
+        # Значения по умолчанию для первого запуска
         default_settings = {
-            "INTERVAL": "5",
-            "THRESHOLD": "5",
-            "EMPTY_THRESHOLD": "99",
+            "INTERVAL": "10",
             "TELEGRAM_ENABLED": "False",
-            "TELEGRAM_TOKEN": "",
             "TELEGRAM_CHAT_ID": "",
+            "WINDOWS_NOTIFICATIONS_ENABLED": "True",
+            "MONITOR_LEFT": "11",
+            "MONITOR_TOP": "233",
+            "MONITOR_WIDTH": "1976",
+            "MONITOR_HEIGHT": "220",
+            "REGION": "Волга",
+            "SOUND_VOLUME": "50",
+            "AUDIO_DEVICE": "",
         }
         for key, value in default_settings.items():
             set_key(env_path, key, value)
 
+    # Загружаем переменные окружения из файла
     load_dotenv(env_path)
     return dotenv_values(env_path)
 
 
-def save_settings(env_path, new_settings):
-    """Сохраняет настройки в .env файл"""
+def save_settings(env_path: str, new_settings: dict) -> bool:
+    """
+    Сохраняет новые настройки в .env файл. Записываются только те ключи,
+    значения которых изменились по сравнению с текущими.
+
+    :param env_path: Путь к файлу .env.
+    :param new_settings: Словарь с новыми настройками (ключ-значение).
+    :return: True, если хотя бы одно значение было изменено, иначе False.
+    """
     settings_changed = False
     current_settings = dotenv_values(env_path)
 

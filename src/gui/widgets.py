@@ -1,9 +1,19 @@
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont, QIcon
-from PyQt5.QtWidgets import QGroupBox, QLabel, QPushButton, QStyle, QToolButton, QWidget, QHBoxLayout
+from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtGui import QFont, QIcon, QPixmap
+from PyQt5.QtWidgets import (QComboBox, QDialog, QGroupBox, QHBoxLayout, QLabel, QMessageBox, QPushButton, QSlider,
+                             QStyle, QToolButton, QVBoxLayout, QWidget)
+
+from src.utils.logger_config import setup_logger
+
+logger = setup_logger("widgets.log", __name__)
 
 
 class RoundedGroupBox(QGroupBox):
+    """
+    Группа с закруглёнными углами и тёмным фоном, используемая для визуального
+    выделения блоков настроек в интерфейсе.
+    """
+
     def __init__(self, title="", parent=None):
         super().__init__(title, parent)
         self.setStyleSheet(
@@ -28,6 +38,11 @@ class RoundedGroupBox(QGroupBox):
 
 
 class StyledButton(QPushButton):
+    """
+    Кастомная кнопка с единым стилем для всего приложения:
+    синий фон, скруглённые углы, изменение цвета при наведении.
+    """
+
     def __init__(self, text, parent=None):
         super().__init__(text, parent)
         self.setMinimumHeight(36)
@@ -57,20 +72,47 @@ class StyledButton(QPushButton):
 
 
 class TitleBar(QWidget):
+    """
+    Кастомная строка заголовка для frameless-окон.
+    Содержит иконку, название, кнопки «О программе», свернуть и закрыть.
+    Обеспечивает перетаскивание окна за эту область.
+    """
+
+    @staticmethod
+    def get_resource_path(relative_path):
+        """Возвращает абсолютный путь к ресурсу (для EXE и режима разработки)."""
+        import sys
+        from pathlib import Path
+
+        if getattr(sys, "frozen", False):
+            if hasattr(sys, "_MEIPASS"):
+                base_path = Path(sys._MEIPASS)
+            else:
+                base_path = Path(sys.executable).parent
+        else:
+            base_path = Path(__file__).parent.parent.parent
+        return base_path / "resources" / relative_path
+
     def __init__(self, parent):
         super().__init__(parent)
         self.parent = parent
-        self.setFixedHeight(32)
+        self.setFixedHeight(46)
         self.setStyleSheet("background-color: #292a2d;")
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 0, 12, 0)
+        layout.setContentsMargins(12, 2, 12, 2)
         layout.setSpacing(10)
 
+        # Иконка приложения (или стандартная, если файл не найден)
         self.icon_label = QLabel()
-        self.icon_label.setPixmap(QIcon(self.style().standardIcon(QStyle.SP_ComputerIcon)).pixmap(24, 24))
+        icon_path = self.get_resource_path("icons/app_icon.png")
+        if icon_path.exists():
+            self.icon_label.setPixmap(QIcon(str(icon_path)).pixmap(32, 32))
+        else:
+            self.icon_label.setPixmap(QIcon(self.style().standardIcon(QStyle.SP_ComputerIcon)).pixmap(32, 32))
         layout.addWidget(self.icon_label)
 
+        # Название программы
         self.title = QLabel("Screen Monitor")
         self.title.setFont(QFont("Segoe UI", 10, QFont.Bold))
         self.title.setStyleSheet("color: #f8faff;")
@@ -78,6 +120,51 @@ class TitleBar(QWidget):
 
         layout.addStretch()
 
+        # Кнопка вызова окна «О программе»
+        self.about_btn = QToolButton()
+        self.about_btn.setText("?")
+        self.about_btn.setToolTip("О программе")
+        self.about_btn.setStyleSheet(
+            """
+            QToolButton {
+                background-color: transparent;
+                color: #7d7f86;
+                border: none;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            QToolButton:hover {
+                color: #4d6bfe;
+                background-color: #3a3c42;
+                border-radius: 4px;
+            }
+        """
+        )
+        self.about_btn.setFixedSize(24, 24)
+        self.about_btn.clicked.connect(self.show_about_dialog)
+        layout.addWidget(self.about_btn)
+
+        # Кнопка сворачивания окна
+        self.minimize_btn = QToolButton()
+        self.minimize_btn.setIcon(QIcon(self.style().standardIcon(QStyle.SP_TitleBarMinButton)))
+        self.minimize_btn.setToolTip("Свернуть")
+        self.minimize_btn.setStyleSheet(
+            """
+            QToolButton {
+                background-color: transparent;
+                border: none;
+            }
+            QToolButton:hover {
+                background-color: #3a3c42;
+                border-radius: 4px;
+            }
+        """
+        )
+        self.minimize_btn.setFixedSize(24, 24)
+        self.minimize_btn.clicked.connect(self.parent.showMinimized)
+        layout.addWidget(self.minimize_btn)
+
+        # Кнопка закрытия окна
         self.close_btn = QToolButton()
         self.close_btn.setIcon(QIcon(self.style().standardIcon(QStyle.SP_TitleBarCloseButton)))
         self.close_btn.setStyleSheet(
@@ -95,12 +182,504 @@ class TitleBar(QWidget):
         self.close_btn.clicked.connect(self.parent.close)
         layout.addWidget(self.close_btn)
 
+    def show_about_dialog(self):
+        """Показывает модальное окно с информацией о программе."""
+        try:
+            about_text = """
+            <div style="font-family: 'Segoe UI';">
+            <h2 style="color: #4d6bfe; text-align: center;">Screen Monitor</h2>
+
+            <p><b>Версия:</b> 1.1.0</p>
+            <p><b>Описание:</b> Программа для мониторинга экрана и обнаружения аварийных ситуаций в системах БТИ.</p>
+
+            <h3>Основные функции:</h3>
+            <ul>
+                <li>Мониторинг выбранной области экрана</li>
+                <li>Обнаружение новых аварий</li>
+                <li>Звуковые оповещения для разных регионов</li>
+                <li>Telegram-уведомления через бота @monitoringbti_bot</li>
+                <li>Всплывающие Windows-уведомления</li>
+                <li>Гибкая настройка интервала проверки</li>
+            </ul>
+
+            <h3>Как использовать:</h3>
+            <ol>
+                <li>Выберите область мониторинга с помощью кнопки "Выбрать область"</li>
+                <li>Настройте интервал проверки (рекомендуется 10-20 секунд)</li>
+                <li>Получите Telegram ID через бота @monitoringbti_bot</li>
+                <li>Включите нужные типы уведомлений</li>
+                <li>Нажмите "Запустить мониторинг"</li>
+            </ol>
+
+            <h3>Поддерживаемые регионы:</h3>
+            <ul>
+                <li>Волга</li>
+                <li>Юг</li>
+                <li>Северо-Запад</li>
+                <li>Центр</li>
+                <li>Москва</li>
+            </ul>
+
+            <p><b>Для получения Telegram ID:</b><br>
+            Перейдите к <a href='https://t.me/monitoringbti_bot' style='color: #4d6bfe;'>@monitoringbti_bot</a> и нажмите "Получить ID"</p>
+
+            <hr style="border: 1px solid #3a3c42;">
+            <p style="color: #7d7f86; font-size: 10px; text-align: center;">
+            © 2026 Screen Monitor<br>
+            Gendin N. S.
+            </p>
+            </div>
+            """
+
+            msg_box = QMessageBox(self.parent)
+            msg_box.setWindowTitle("О программе - Screen Monitor")
+            msg_box.setTextFormat(Qt.RichText)
+            msg_box.setText(about_text)
+
+            icon_path = self.get_resource_path("icons/app_icon.png")
+            if icon_path.exists():
+                msg_box.setWindowIcon(QIcon(str(icon_path)))
+
+            msg_box.setStyleSheet(
+                """
+                QMessageBox {
+                    background-color: #292a2d;
+                    color: #f8faff;
+                    font-family: 'Segoe UI';
+                }
+                QMessageBox QLabel {
+                    color: #f8faff;
+                    background-color: transparent;
+                    font-family: 'Segoe UI';
+                }
+                QMessageBox QPushButton {
+                    background-color: #4d6bfe;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 20px;
+                    min-width: 100px;
+                    font-family: 'Segoe UI';
+                    font-weight: bold;
+                }
+                QMessageBox QPushButton:hover {
+                    background-color: #3a5bd0;
+                }
+            """
+            )
+
+            msg_box.exec_()
+
+        except Exception as e:
+            logger.error(f"Ошибка при показе окна 'О программе': {str(e)}")
+
     def mousePressEvent(self, event):
+        """
+        Запоминает позицию курсора относительно окна для последующего перетаскивания.
+        """
         if event.button() == Qt.LeftButton:
             self.parent.drag_position = event.globalPos() - self.parent.frameGeometry().topLeft()
             event.accept()
 
     def mouseMoveEvent(self, event):
+        """
+        Перемещает главное окно при зажатой левой кнопке мыши.
+        """
         if event.buttons() == Qt.LeftButton:
             self.parent.move(event.globalPos() - self.parent.drag_position)
             event.accept()
+
+
+class NotificationWidget(QWidget):
+    """
+    Всплывающее уведомление поверх всех окон с сообщением об отправке в Telegram.
+    Автоматически закрывается через заданное время или по кнопке.
+    """
+
+    def __init__(self, message, parent=None, duration=15):
+        super().__init__(parent)
+        logger.debug(f"Создание NotificationWidget: {message[:50]}")
+
+        self.duration = duration
+
+        # Флаги: без рамки, поверх всех окон, как подсказка (чтобы не воровать фокус)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.ToolTip)
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)  # не активировать окно при показе
+        self.setFixedSize(400, 170)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+
+        # Верхняя строка с иконкой и заголовком
+        header_layout = QHBoxLayout()
+        icon_label = QLabel("📨")
+        icon_label.setFont(QFont("Segoe UI", 16))
+        header_layout.addWidget(icon_label)
+
+        title_label = QLabel("Уведомление отправлено!")
+        title_label.setFont(QFont("Segoe UI", 12, QFont.Bold))
+        title_label.setStyleSheet("color: #4d6bfe;")
+        header_layout.addWidget(title_label)
+        header_layout.addStretch()
+        layout.addLayout(header_layout)
+
+        # Текст сообщения
+        message_label = QLabel(message)
+        message_label.setStyleSheet(
+            "color: #f8faff; font-size: 11px; background-color: #3a3c42; padding: 8px; border-radius: 6px;"
+        )
+        message_label.setWordWrap(True)
+        message_label.setAlignment(Qt.AlignCenter)
+        message_label.setMinimumHeight(40)
+        layout.addWidget(message_label)
+
+        # Кнопка закрытия
+        confirm_btn = QPushButton("Я увидел уведомление")
+        confirm_btn.setMinimumHeight(40)
+        confirm_btn.setStyleSheet(
+            """
+            QPushButton {
+                background-color: #4d6bfe;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 10px;
+                font-weight: bold;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: #3a5af5;
+            }
+        """
+        )
+        confirm_btn.clicked.connect(self.close)
+        layout.addWidget(confirm_btn)
+
+        # Общий стиль окна
+        self.setStyleSheet(
+            """
+            NotificationWidget {
+                background-color: #292a2d;
+                border: 2px solid #4d6bfe;
+                border-radius: 12px;
+            }
+        """
+        )
+
+        self.setWindowOpacity(0.98)
+
+        # Таймер автоматического закрытия
+        self.auto_close_timer = QTimer()
+        self.auto_close_timer.setSingleShot(True)
+        self.auto_close_timer.timeout.connect(self.close)
+        self.auto_close_timer.start(self.duration * 1000)
+
+        logger.debug("NotificationWidget создан")
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        logger.debug("NotificationWidget показан")
+        self.raise_()
+        self.activateWindow()
+
+    def closeEvent(self, event):
+        super().closeEvent(event)
+        logger.debug("NotificationWidget закрыт")
+
+
+class SoundSettingsDialog(QDialog):
+    """
+    Диалог настройки звука: выбор устройства вывода, регулировка громкости,
+    тестовое воспроизведение. Оформлен в едином стиле с главным окном.
+    """
+
+    @staticmethod
+    def get_resource_path(relative_path):
+        """Возвращает абсолютный путь к ресурсу (для EXE и разработки)."""
+        import sys
+        from pathlib import Path
+
+        if getattr(sys, "frozen", False):
+            if hasattr(sys, "_MEIPASS"):
+                base_path = Path(sys._MEIPASS)
+            else:
+                base_path = Path(sys.executable).parent
+        else:
+            base_path = Path(__file__).parent.parent.parent
+        return base_path / "resources" / relative_path
+
+    def __init__(self, sound_manager, parent=None):
+        super().__init__(parent)
+
+        # Убираем стандартную рамку, делаем фон полупрозрачным для скруглённых углов
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self.setFixedSize(400, 266)
+
+        self.sound_manager = sound_manager
+        self.original_volume = sound_manager.get_volume()
+        self.original_device = sound_manager.current_device
+
+        # Внешний слой с отступом в 1px для имитации тонкой рамки
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(1, 1, 1, 1)
+        outer_layout.setSpacing(0)
+
+        # Основной контейнер с фоном и рамкой
+        self.container = QWidget()
+        self.container.setObjectName("dialogContainer")
+        self.container.setStyleSheet(
+            """
+            #dialogContainer {
+                background-color: #292a2d;
+                border: 1px solid #4d6bfe;
+                border-radius: 10px;
+            }
+        """
+        )
+        outer_layout.addWidget(self.container)
+
+        main_layout = QVBoxLayout(self.container)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Встраиваем тот же TitleBar, но скрываем ненужные кнопки
+        self.title_bar = TitleBar(self)
+        self.title_bar.title.setText("Настройки звука")
+        self.title_bar.about_btn.hide()
+        self.title_bar.minimize_btn.hide()
+        self.title_bar.close_btn.clicked.disconnect()
+        self.title_bar.close_btn.clicked.connect(self.close)
+        main_layout.addWidget(self.title_bar)
+
+        # Контентная область
+        content_widget = QWidget()
+        content_widget.setStyleSheet("background: transparent;")
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(20, 15, 20, 15)
+        content_layout.setSpacing(12)
+
+        # Блок громкости (слайдер + иконка)
+        vol_container = QWidget()
+        vol_container.setStyleSheet("background-color: #32343a; border-radius: 8px;")
+        vol_layout = QHBoxLayout(vol_container)
+        vol_layout.setSpacing(10)
+
+        self.volume_icon_label = QLabel()
+        self.volume_icon_label.setFixedSize(24, 24)
+        self.volume_icon_label.setScaledContents(True)
+        vol_layout.addWidget(self.volume_icon_label)
+
+        self.volume_slider = QSlider(Qt.Horizontal)
+        self.volume_slider.setRange(0, 100)
+        self.volume_slider.setValue(int(self.original_volume * 100))
+        self.volume_slider.valueChanged.connect(self.on_volume_changed)
+        self.volume_slider.setTracking(True)
+        self.volume_slider.setSingleStep(1)
+        self.volume_slider.setPageStep(5)
+        self.volume_slider.setMinimumHeight(36)
+
+        self.volume_slider.setStyleSheet(
+            """
+            QSlider::groove:horizontal {
+                height: 10px;
+                background: #32343a;
+                border-radius: 5px;
+            }
+            QSlider::sub-page:horizontal {
+                border-radius: 5px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #5d7aff, stop:1 #8ab2ff);
+            }
+            QSlider::add-page:horizontal {
+                background: #2b2d31;
+                border-radius: 5px;
+            }
+            QSlider::handle:horizontal {
+                background: #ffffff;
+                border: 4px solid #4d6bfe;
+                width: 22px;
+                height: 22px;
+                border-radius: 11px;
+                margin: -6px 0;
+            }
+            QSlider::handle:horizontal:hover {
+                border: 4px solid #7aa2f7;
+            }
+            QSlider::handle:horizontal:pressed {
+                border: 4px solid #3a5af5;
+            }
+        """
+        )
+        vol_layout.addWidget(self.volume_slider)
+
+        self.volume_label = QLabel(f"{self.volume_slider.value()}%")
+        self.volume_label.setFixedWidth(35)
+        self.volume_label.setStyleSheet("color: #f8faff;")
+        vol_layout.addWidget(self.volume_label)
+
+        content_layout.addWidget(vol_container)
+
+        # Выбор устройства вывода
+        dev_layout = QHBoxLayout()
+        dev_layout.addWidget(QLabel("Устройство:"))
+
+        self.device_combo = QComboBox()
+        self.device_combo.setStyleSheet(
+            """
+            QComboBox {
+                background-color: #3a3c42;
+                color: #f8faff;
+                border: 1px solid #4d6bfe;
+                border-radius: 6px;
+                padding: 5px;
+                min-height: 28px;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #3a3c42;
+                color: #f8faff;
+                selection-background-color: #4d6bfe;
+                border: 1px solid #4d6bfe;
+            }
+        """
+        )
+        self.populate_devices()
+        self.device_combo.currentIndexChanged.connect(self.on_device_changed)
+        dev_layout.addWidget(self.device_combo)
+        content_layout.addLayout(dev_layout)
+
+        # Кнопка тестового сигнала
+        test_btn = QPushButton("Тестовый сигнал")
+        test_btn.setStyleSheet(
+            """
+            QPushButton {
+                background-color: #4d6bfe;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #3a5af5; }
+            QPushButton:pressed { background-color: #2d4de3; }
+        """
+        )
+        test_btn.clicked.connect(self.test_sound)
+        content_layout.addWidget(test_btn)
+
+        # Кнопки OK/Отмена
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+
+        ok_btn = QPushButton("OK")
+        ok_btn.setStyleSheet(test_btn.styleSheet())
+        ok_btn.clicked.connect(self.accept)
+
+        cancel_btn = QPushButton("Отмена")
+        cancel_btn.setStyleSheet(test_btn.styleSheet())
+        cancel_btn.clicked.connect(self.reject)
+
+        btn_layout.addWidget(ok_btn)
+        btn_layout.addWidget(cancel_btn)
+        content_layout.addLayout(btn_layout)
+
+        main_layout.addWidget(content_widget)
+
+        # Центрирование относительно родительского окна
+        if parent:
+            parent_rect = parent.geometry()
+            self.move(parent_rect.center() - self.rect().center())
+
+        self.update_volume_icon(self.volume_slider.value())
+
+    def update_volume_icon(self, value):
+        """
+        Обновляет иконку громкости в зависимости от текущего значения (0, низкая, средняя, высокая).
+        """
+        if value == 0:
+            icon_name = "volume_off.png"
+        elif value <= 32:
+            icon_name = "volume_low.png"
+        elif value <= 65:
+            icon_name = "volume_medium.png"
+        else:
+            icon_name = "volume_high.png"
+
+        icon_path = self.get_resource_path(f"icons/{icon_name}")
+        if icon_path.exists():
+            pixmap = QPixmap(str(icon_path))
+            scaled = pixmap.scaled(24, 24, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.volume_icon_label.setPixmap(scaled)
+        else:
+            # fallback на текстовый символ
+            self.volume_icon_label.setText("🔊")
+            self.volume_icon_label.setStyleSheet("color: #f8faff; font-size: 16px;")
+
+    def populate_devices(self):
+        """
+        Заполняет комбобокс списком доступных аудиоустройств вывода.
+        Первый элемент — устройство по умолчанию (userData = None).
+        """
+        self.device_combo.clear()
+        self.device_combo.addItem("Устройство по умолчанию", None)
+        devices = self.sound_manager.get_output_devices()
+        for idx, name in devices:
+            self.device_combo.addItem(name, idx)
+
+        # Восстанавливаем текущее устройство
+        current_idx = self.sound_manager.current_device
+        if current_idx is None:
+            self.device_combo.setCurrentIndex(0)
+        else:
+            for i in range(self.device_combo.count()):
+                if self.device_combo.itemData(i) == current_idx:
+                    self.device_combo.setCurrentIndex(i)
+                    break
+            else:
+                self.device_combo.setCurrentIndex(0)
+
+    def on_volume_changed(self, value):
+        """Обрабатывает изменение громкости слайдером."""
+        self.volume_label.setText(f"{value}%")
+        self.sound_manager.set_volume(value / 100.0)
+        self.update_volume_icon(value)
+
+    def on_device_changed(self, index):
+        """
+        Обрабатывает выбор устройства в комбобоксе.
+        При неудачном переключении восстанавливает предыдущее устройство.
+        """
+        if not self.device_combo.isEnabled():
+            return
+        device_index = self.device_combo.currentData()
+        success = self.sound_manager.set_device_by_index(device_index)
+        if not success:
+            # Возвращаем комбобокс к предыдущему значению
+            current_idx = self.sound_manager.current_device
+            self.device_combo.blockSignals(True)
+            if current_idx is None:
+                self.device_combo.setCurrentIndex(0)
+            else:
+                for i in range(self.device_combo.count()):
+                    if self.device_combo.itemData(i) == current_idx:
+                        self.device_combo.setCurrentIndex(i)
+                        break
+                else:
+                    self.device_combo.setCurrentIndex(0)
+            self.device_combo.blockSignals(False)
+
+    def test_sound(self):
+        """Воспроизводит тестовый звук через текущее устройство."""
+        self.sound_manager.test_sound()
+
+    def accept(self):
+        """Подтверждение изменений — закрываем диалог, сохраняя настройки."""
+        super().accept()
+
+    def reject(self):
+        """Отмена — возвращаем исходные громкость и устройство."""
+        self.sound_manager.set_volume(self.original_volume)
+        self.sound_manager.set_device_by_index(self.original_device)
+        super().reject()

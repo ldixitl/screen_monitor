@@ -12,9 +12,9 @@ def setup_logger(log_filename: str, logger_name: str) -> logging.Logger:
     :param logger_name: Название логгера.
     :return: Настроенный объект логгера.
     """
-    # Определяем корень проекта (где находится main.py)
-    if getattr(sys, 'frozen', False):
-        # Для исполняемых файлов (PyInstaller)
+    # Определяем корень проекта (main.py)
+    if getattr(sys, "frozen", False):
+        # Для исполняемых файлов
         application_path = Path(sys.executable).parent
     else:
         # Для обычного запуска
@@ -29,10 +29,7 @@ def setup_logger(log_filename: str, logger_name: str) -> logging.Logger:
     logger.setLevel(logging.DEBUG)
 
     # Создаем форматтер
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
-    )
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
     # Обработчик для записи в файл (добавляем, а не перезаписываем)
     file_handler = logging.FileHandler(log_file_path, mode="w", encoding="utf-8")
