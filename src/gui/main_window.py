@@ -77,7 +77,6 @@ class MainWindow(QMainWindow):
 
             # Переменные для состояния
             self.telegram_enabled = False
-            self.notifications = []  # список активных всплывающих уведомлений
 
             # Загружаем настройки из .env файла
             self.env_path = ".env"
@@ -637,6 +636,36 @@ class MainWindow(QMainWindow):
             logger.error(f"Ошибка при сохранении настроек: {str(e)}", exc_info=True)
             self.update_log("⛔ Ошибка при сохранении настроек")
 
+    def show_incident_notification(self, message):
+        """
+        Отображает всплывающее уведомление об обнаруженной аварии.
+        Уведомление показывается только если включены Windows-уведомления.
+        """
+        if not self.windows_checkbox.isChecked():
+            logger.debug("Windows-уведомления отключены, пропускаем показ")
+            return
+
+        logger.debug(f"show_incident_notification: {message[:50]}...")
+
+        # Убираем из сообщения информацию о площади (всё после первой открывающей скобки)
+        clean_message = message.split('(')[0].strip()
+        duration = self.notify_duration_spin.value()
+
+        notification = NotificationWidget(
+            clean_message, self, duration=duration, title="Обнаружена авария"
+        )
+
+        # Позиционируем в правом нижнем углу экрана
+        screen_geo = QApplication.primaryScreen().availableGeometry()
+        notification.move(
+            screen_geo.width() - notification.width() - 20,
+            screen_geo.height() - notification.height() - 20
+        )
+        notification.show()
+        notification.raise_()
+        notification.activateWindow()
+        logger.debug("Уведомление об аварии показано")
+
     def test_telegram(self):
         """
         Отправляет тестовое сообщение в Telegram, чтобы проверить правильность введённого ID
@@ -892,65 +921,6 @@ class MainWindow(QMainWindow):
         self.next_check_time = time.time() + self.monitor_thread.check_interval
         self.update_timer_display()
 
-    def show_telegram_notification(self, message):
-        """
-        Отображает всплывающее уведомление о том, что сообщение было отправлено в Telegram.
-        Уведомление показывается только если включены Windows-уведомления.
-        """
-        try:
-            if not self.windows_checkbox.isChecked():
-                logger.debug("Windows-уведомления отключены, пропускаем показ")
-                return
-
-            logger.debug(f"show_telegram_notification вызван: {message[:50]}...")
-
-            duration = self.notify_duration_spin.value()
-            notification = NotificationWidget(
-                f"{message[:120]}{'...' if len(message) > 120 else ''}", self, duration=duration
-            )
-
-            # Позиционируем в правом нижнем углу экрана
-            screen_geo = QApplication.primaryScreen().availableGeometry()
-            notification.move(
-                screen_geo.width() - notification.width() - 20, screen_geo.height() - notification.height() - 20
-            )
-
-            notification.show()
-            notification.raise_()
-            notification.activateWindow()
-            self.animate_notification(notification)
-
-            logger.debug("Уведомление показано поверх всех окон")
-
-            self.notifications.append(notification)
-            notification.destroyed.connect(lambda: self.remove_notification(notification))
-
-        except Exception as e:
-            logger.error(f"Ошибка при показе уведомления: {str(e)}", exc_info=True)
-
-    def animate_notification(self, notification):
-        """
-        Запускает простую анимацию мигания для привлечения внимания к уведомлению.
-        """
-        try:
-            animation = QPropertyAnimation(notification, b"windowOpacity")
-            animation.setDuration(1000)
-            animation.setStartValue(1.0)
-            animation.setKeyValueAt(0.5, 0.5)
-            animation.setEndValue(1.0)
-            animation.setLoopCount(2)  # два раза мигнёт
-            animation.start()
-        except Exception as e:
-            logger.error(f"Ошибка анимации: {str(e)}")
-
-    def remove_notification(self, notification):
-        """
-        Удаляет уведомление из внутреннего списка после его закрытия.
-        """
-        if notification in self.notifications:
-            self.notifications.remove(notification)
-            logger.debug("Уведомление удалено из списка")
-
     def open_sound_settings(self):
         """
         Открывает диалог настройки звука (SoundSettingsDialog).
@@ -996,18 +966,20 @@ class MainWindow(QMainWindow):
                 lambda: self.scroll_area.verticalScrollBar().setValue(self.scroll_area.verticalScrollBar().maximum()),
             )
 
-            # Если это сообщение о новой аварии — отправляем Telegram
+            # Если это сообщение о новой аварии
             if "🔴 Обнаружена новая авария" in message:
+                # Показываем всплывающее уведомление (если включены Windows-уведомления)
+                self.show_incident_notification(message)
+
+                # Отправляем Telegram, если включено
                 if self.telegram_checkbox.isChecked():
                     chat_id = self.telegram_chat_input.text().strip()
                     if chat_id:
                         logger.debug(f"Отправка сообщения в Telegram: {message}")
                         result = send_telegram_message(chat_id, message)
                         logger.debug(f"Результат отправки: {result}")
-                        if "успешно" in result.lower() or "отправлено" in result.lower():
-                            self.show_telegram_notification(message)
-                        else:
-                            logger.warning(f"Не удалось отправить сообщение: {result}")
+                        # Уведомление об отправке больше не показываем (можно убрать или оставить отдельно)
+                        # если хотите оставить уведомление об отправке, создайте другой метод с другим заголовком
                     else:
                         logger.debug("Не указан chat_id для Telegram")
                 else:

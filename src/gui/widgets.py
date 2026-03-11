@@ -1,4 +1,4 @@
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, pyqtProperty
 from PyQt5.QtGui import QFont, QIcon, QPixmap
 from PyQt5.QtWidgets import (QComboBox, QDialog, QGroupBox, QHBoxLayout, QLabel, QMessageBox, QPushButton, QSlider,
                              QStyle, QToolButton, QVBoxLayout, QWidget)
@@ -292,38 +292,63 @@ class TitleBar(QWidget):
 
 class NotificationWidget(QWidget):
     """
-    Всплывающее уведомление поверх всех окон с сообщением об отправке в Telegram.
-    Автоматически закрывается через заданное время или по кнопке.
+    Всплывающее уведомление поверх всех окон в стиле диалога настроек.
+    Содержит заголовок с мигающей красной точкой, текст сообщения и кнопку закрытия.
+    Автоматически закрывается через заданное время.
     """
 
-    def __init__(self, message, parent=None, duration=15):
+    def __init__(self, message, parent=None, duration=15, title="Уведомление"):
         super().__init__(parent)
         logger.debug(f"Создание NotificationWidget: {message[:50]}")
 
         self.duration = duration
+        self.dot_visible = True
 
-        # Флаги: без рамки, поверх всех окон, как подсказка (чтобы не воровать фокус)
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.ToolTip)
+        # Убираем стандартную рамку, делаем фон полупрозрачным для скруглённых углов
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WA_DeleteOnClose)
-        self.setAttribute(Qt.WA_ShowWithoutActivating)  # не активировать окно при показе
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.setFixedSize(400, 170)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
+        # Внешний слой с отступом 1px для имитации тонкой рамки
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(1, 1, 1, 1)
+        outer_layout.setSpacing(0)
 
-        # Верхняя строка с иконкой и заголовком
+        # Основной контейнер с фоном и рамкой (как в SoundSettingsDialog)
+        self.container = QWidget()
+        self.container.setObjectName("notificationContainer")
+        self.container.setStyleSheet("""
+            #notificationContainer {
+                background-color: #292a2d;
+                border: 1px solid #4d6bfe;
+                border-radius: 10px;
+            }
+        """)
+        outer_layout.addWidget(self.container)
+
+        # Внутренний layout контейнера
+        inner_layout = QVBoxLayout(self.container)
+        inner_layout.setContentsMargins(20, 15, 20, 15)
+        inner_layout.setSpacing(12)
+
+        # Заголовок с центрированной красной точкой
         header_layout = QHBoxLayout()
-        icon_label = QLabel("📨")
-        icon_label.setFont(QFont("Segoe UI", 16))
-        header_layout.addWidget(icon_label)
+        header_layout.setSpacing(4)
+        header_layout.setAlignment(Qt.AlignCenter)
 
-        title_label = QLabel("Уведомление отправлено!")
+        self.dot_label = QLabel("●")
+        self.dot_label.setStyleSheet("color: #ff3b3b; font-size: 18px;")
+        self.dot_label.setFixedWidth(16)
+
+        title_label = QLabel(title)
         title_label.setFont(QFont("Segoe UI", 12, QFont.Bold))
         title_label.setStyleSheet("color: #4d6bfe;")
+
+        header_layout.addWidget(self.dot_label)
         header_layout.addWidget(title_label)
-        header_layout.addStretch()
-        layout.addLayout(header_layout)
+        inner_layout.addLayout(header_layout)
 
         # Текст сообщения
         message_label = QLabel(message)
@@ -333,40 +358,27 @@ class NotificationWidget(QWidget):
         message_label.setWordWrap(True)
         message_label.setAlignment(Qt.AlignCenter)
         message_label.setMinimumHeight(40)
-        layout.addWidget(message_label)
+        inner_layout.addWidget(message_label)
 
         # Кнопка закрытия
-        confirm_btn = QPushButton("Я увидел уведомление")
+        confirm_btn = QPushButton("Принято")
         confirm_btn.setMinimumHeight(40)
-        confirm_btn.setStyleSheet(
-            """
+        confirm_btn.setStyleSheet("""
             QPushButton {
                 background-color: #4d6bfe;
                 color: white;
                 border: none;
-                border-radius: 8px;
-                padding: 10px;
+                border-radius: 6px;
+                padding: 8px 16px;
                 font-weight: bold;
                 font-size: 11px;
             }
             QPushButton:hover {
                 background-color: #3a5af5;
             }
-        """
-        )
+        """)
         confirm_btn.clicked.connect(self.close)
-        layout.addWidget(confirm_btn)
-
-        # Общий стиль окна
-        self.setStyleSheet(
-            """
-            NotificationWidget {
-                background-color: #292a2d;
-                border: 2px solid #4d6bfe;
-                border-radius: 12px;
-            }
-        """
-        )
+        inner_layout.addWidget(confirm_btn)
 
         self.setWindowOpacity(0.98)
 
@@ -376,15 +388,67 @@ class NotificationWidget(QWidget):
         self.auto_close_timer.timeout.connect(self.close)
         self.auto_close_timer.start(self.duration * 1000)
 
+        # Анимация пульсации рамки (alpha от 80 до 255)
+        self.pulse_animation = QPropertyAnimation(self, b"borderOpacity")
+        self.pulse_animation.setDuration(900)
+        self.pulse_animation.setStartValue(80)
+        self.pulse_animation.setEndValue(255)
+        self.pulse_animation.setLoopCount(-1)
+
+        # Таймер мигания красной точки
+        self.blink_timer = QTimer()
+        self.blink_timer.timeout.connect(self.toggle_dot)
+        self.blink_timer.start(500)
+
         logger.debug("NotificationWidget создан")
+
+    def toggle_dot(self):
+        """Переключает внешний вид красной точки: яркость и размер меняются для эффекта пульса."""
+        self.dot_visible = not self.dot_visible
+        if self.dot_visible:
+            self.dot_label.setStyleSheet("color: #ff3b3b; font-size: 18px;")
+        else:
+            self.dot_label.setStyleSheet("color: #660000; font-size: 16px;")
+
+    def set_border_opacity(self, opacity):
+        """
+        Устанавливает прозрачность рамки контейнера.
+        :param opacity: целое число от 0 до 255.
+        """
+        self.container.setStyleSheet(f"""
+            #notificationContainer {{
+                background-color: #292a2d;
+                border: 1px solid rgba(77, 107, 254, {opacity});
+                border-radius: 10px;
+            }}
+        """)
+
+    def get_border_opacity(self):
+        """Возвращает текущую прозрачность рамки (нужно для свойства)."""
+        return 255  # не используется в анимации, но требуется для свойства
+
+    borderOpacity = pyqtProperty(float, fget=get_border_opacity, fset=set_border_opacity)
 
     def showEvent(self, event):
         super().showEvent(event)
-        logger.debug("NotificationWidget показан")
         self.raise_()
         self.activateWindow()
 
+        # Плавное появление (fade-in)
+        self.fade_animation = QPropertyAnimation(self, b"windowOpacity")
+        self.fade_animation.setDuration(350)
+        self.fade_animation.setStartValue(0)
+        self.fade_animation.setEndValue(0.98)
+        self.fade_animation.start()
+
+        # Запуск пульсации рамки
+        self.pulse_animation.start()
+
+        logger.debug("NotificationWidget показан с анимациями")
+
     def closeEvent(self, event):
+        self.blink_timer.stop()
+        self.pulse_animation.stop()
         super().closeEvent(event)
         logger.debug("NotificationWidget закрыт")
 
