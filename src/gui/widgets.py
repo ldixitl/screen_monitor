@@ -1,4 +1,4 @@
-from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, pyqtProperty
+from PyQt5.QtCore import QPropertyAnimation, Qt, QTimer, pyqtProperty
 from PyQt5.QtGui import QFont, QIcon, QPixmap
 from PyQt5.QtWidgets import (QComboBox, QDialog, QGroupBox, QHBoxLayout, QLabel, QMessageBox, QPushButton, QSlider,
                              QStyle, QToolButton, QVBoxLayout, QWidget)
@@ -319,13 +319,15 @@ class NotificationWidget(QWidget):
         # Основной контейнер с фоном и рамкой (как в SoundSettingsDialog)
         self.container = QWidget()
         self.container.setObjectName("notificationContainer")
-        self.container.setStyleSheet("""
+        self.container.setStyleSheet(
+            """
             #notificationContainer {
                 background-color: #292a2d;
                 border: 1px solid #4d6bfe;
                 border-radius: 10px;
             }
-        """)
+        """
+        )
         outer_layout.addWidget(self.container)
 
         # Внутренний layout контейнера
@@ -363,7 +365,8 @@ class NotificationWidget(QWidget):
         # Кнопка закрытия
         confirm_btn = QPushButton("Принято")
         confirm_btn.setMinimumHeight(40)
-        confirm_btn.setStyleSheet("""
+        confirm_btn.setStyleSheet(
+            """
             QPushButton {
                 background-color: #4d6bfe;
                 color: white;
@@ -376,7 +379,8 @@ class NotificationWidget(QWidget):
             QPushButton:hover {
                 background-color: #3a5af5;
             }
-        """)
+        """
+        )
         confirm_btn.clicked.connect(self.close)
         inner_layout.addWidget(confirm_btn)
 
@@ -415,13 +419,15 @@ class NotificationWidget(QWidget):
         Устанавливает прозрачность рамки контейнера.
         :param opacity: целое число от 0 до 255.
         """
-        self.container.setStyleSheet(f"""
+        self.container.setStyleSheet(
+            f"""
             #notificationContainer {{
                 background-color: #292a2d;
                 border: 1px solid rgba(77, 107, 254, {opacity});
                 border-radius: 10px;
             }}
-        """)
+        """
+        )
 
     def get_border_opacity(self):
         """Возвращает текущую прозрачность рамки (нужно для свойства)."""

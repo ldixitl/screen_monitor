@@ -191,35 +191,28 @@ class ScreenMonitorThread(QThread):
         try:
             from mss import mss
 
+            from src.utils.screen_utils import get_physical_area
+
             with mss() as sct:
-                monitors = sct.monitors[1:]  # пропускаем первый элемент (общая область)
-
-                # Находим самую левую границу всех мониторов
-                min_left = min(m["left"] for m in monitors)
-
-                # Корректируем координаты области
-                adjusted_area = {
-                    "left": self.monitor["left"] + min_left,
-                    "top": self.monitor["top"],
-                    "width": self.monitor["width"],
-                    "height": self.monitor["height"],
-                }
+                monitors = sct.monitors[1:]
+                # Получаем физические координаты
+                physical_area = get_physical_area(self.monitor)
 
                 # Пытаемся найти монитор, полностью содержащий скорректированную область
                 for monitor in monitors:
                     if (
-                        adjusted_area["left"] >= monitor["left"]
-                        and adjusted_area["top"] >= monitor["top"]
-                        and adjusted_area["left"] + adjusted_area["width"] <= monitor["left"] + monitor["width"]
-                        and adjusted_area["top"] + adjusted_area["height"] <= monitor["top"] + monitor["height"]
+                        physical_area["left"] >= monitor["left"]
+                        and physical_area["top"] >= monitor["top"]
+                        and physical_area["left"] + physical_area["width"] <= monitor["left"] + monitor["width"]
+                        and physical_area["top"] + physical_area["height"] <= monitor["top"] + monitor["height"]
                     ):
-                        screenshot = sct.grab(adjusted_area)
-                        logger.debug(f"Захвачена область: {adjusted_area} на мониторе {monitor}")
+                        screenshot = sct.grab(physical_area)
+                        logger.debug(f"Захвачена область: {physical_area} на мониторе {monitor}")
                         return Image.frombytes("RGB", screenshot.size, screenshot.rgb)
 
                 # Если ни один монитор не подошёл (область выходит за границы), пробуем прямой захват
                 logger.warning("Область не найдена на мониторе, используем прямой захват")
-                screenshot = sct.grab(adjusted_area)
+                screenshot = sct.grab(physical_area)
                 return Image.frombytes("RGB", screenshot.size, screenshot.rgb)
 
         except Exception as e:

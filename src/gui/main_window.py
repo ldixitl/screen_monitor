@@ -1,6 +1,6 @@
 import time
 
-from PyQt5.QtCore import QPropertyAnimation, Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QColor, QFont, QIcon, QPalette
 from PyQt5.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
                              QMainWindow, QPushButton, QScrollArea, QSizePolicy, QSpinBox, QStyle, QVBoxLayout,
@@ -648,18 +648,15 @@ class MainWindow(QMainWindow):
         logger.debug(f"show_incident_notification: {message[:50]}...")
 
         # Убираем из сообщения информацию о площади (всё после первой открывающей скобки)
-        clean_message = message.split('(')[0].strip()
+        clean_message = message.split("(")[0].strip()
         duration = self.notify_duration_spin.value()
 
-        notification = NotificationWidget(
-            clean_message, self, duration=duration, title="Обнаружена авария"
-        )
+        notification = NotificationWidget(clean_message, self, duration=duration, title="Обнаружена авария")
 
         # Позиционируем в правом нижнем углу экрана
         screen_geo = QApplication.primaryScreen().availableGeometry()
         notification.move(
-            screen_geo.width() - notification.width() - 20,
-            screen_geo.height() - notification.height() - 20
+            screen_geo.width() - notification.width() - 20, screen_geo.height() - notification.height() - 20
         )
         notification.show()
         notification.raise_()
@@ -749,42 +746,38 @@ class MainWindow(QMainWindow):
             from PyQt5.QtWidgets import QDialog, QLabel, QVBoxLayout
 
             from src.gui.widgets import StyledButton
+            from src.utils.screen_utils import get_physical_area
 
             monitor_area = self.monitor_thread.monitor
+            # Получаем физические координаты для захвата
+            physical_area = get_physical_area(monitor_area)
 
             with mss() as sct:
-                monitors = sct.monitors[1:]  # реальные мониторы
-
-                # Корректируем координаты с учётом смещения самого левого монитора
-                min_left = min(m["left"] for m in monitors)
-                adjusted_area = {
-                    "left": monitor_area["left"] + min_left,
-                    "top": monitor_area["top"],
-                    "width": monitor_area["width"],
-                    "height": monitor_area["height"],
-                }
-
+                monitors = sct.monitors[1:]
                 # Определяем, какому монитору принадлежит скорректированная область
                 target_monitor = None
                 for monitor in monitors:
                     if (
-                        adjusted_area["left"] >= monitor["left"]
-                        and adjusted_area["top"] >= monitor["top"]
-                        and adjusted_area["left"] + adjusted_area["width"] <= monitor["left"] + monitor["width"]
-                        and adjusted_area["top"] + adjusted_area["height"] <= monitor["top"] + monitor["height"]
+                        physical_area["left"] >= monitor["left"]
+                        and physical_area["top"] >= monitor["top"]
+                        and physical_area["left"] + physical_area["width"] <= monitor["left"] + monitor["width"]
+                        and physical_area["top"] + physical_area["height"] <= monitor["top"] + monitor["height"]
                     ):
                         target_monitor = monitor
                         break
-
                 if not target_monitor:
                     target_monitor = monitors[0]
 
-                screenshot = sct.grab(adjusted_area)
+                screenshot = sct.grab(physical_area)
                 img = Image.frombytes("RGB", screenshot.size, screenshot.rgb)
 
             # Преобразуем PIL Image в QPixmap
             qimage = ImageQt(img).copy()
             pixmap = QPixmap.fromImage(qimage)
+
+            # Получаем масштаб экрана и логические размеры области
+            logical_width = monitor_area["width"]
+            logical_height = monitor_area["height"]
 
             # Создаём диалог предпросмотра
             preview_dialog = QDialog(self)
@@ -806,18 +799,20 @@ class MainWindow(QMainWindow):
 
             preview_dialog.setWindowFlags(preview_dialog.windowFlags() | Qt.WindowMinimizeButtonHint)
 
-            # Размер окна подстраиваем под размер изображения + отступы
-            window_width = pixmap.width() + 40
-            window_height = pixmap.height() + 200
+            # Размер окна подстраиваем под логический размер изображения + отступы
+            window_width = logical_width + 40
+            window_height = logical_height + 200
             preview_dialog.setFixedSize(window_width, window_height)
 
             layout = QVBoxLayout(preview_dialog)
             layout.setContentsMargins(20, 20, 20, 20)
             layout.setSpacing(15)
 
-            # Изображение
+            # Изображение – фиксированный логический размер с масштабированием
             image_label = QLabel()
+            image_label.setFixedSize(logical_width, logical_height)
             image_label.setPixmap(pixmap)
+            image_label.setScaledContents(True)  # масштабируем под размер label'а
             image_label.setAlignment(Qt.AlignCenter)
             image_label.setStyleSheet("border: 2px solid #4d6bfe; border-radius: 8px;")
             layout.addWidget(image_label)
@@ -826,7 +821,7 @@ class MainWindow(QMainWindow):
             info_label = QLabel(
                 f"<b>Выбранная область:</b> {monitor_area['width']}x{monitor_area['height']} "
                 f"({monitor_area['left']}, {monitor_area['top']})<br>"
-                f"<b>С учётом смещения:</b> {adjusted_area['left']}, {adjusted_area['top']}<br>"
+                f"<b>С учётом смещения:</b> {physical_area['left']}, {physical_area['top']}<br>"
                 f"<b>Монитор:</b> {target_monitor['width']}x{target_monitor['height']} "
                 f"({target_monitor['left']}, {target_monitor['top']})"
             )
