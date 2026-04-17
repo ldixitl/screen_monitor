@@ -1,7 +1,9 @@
+from pathlib import Path
+
 from PyQt5.QtCore import QPropertyAnimation, Qt, QTimer, pyqtProperty
 from PyQt5.QtGui import QFont, QIcon, QPixmap
-from PyQt5.QtWidgets import (QComboBox, QDialog, QGroupBox, QHBoxLayout, QLabel, QMessageBox, QPushButton, QSlider,
-                             QStyle, QToolButton, QVBoxLayout, QWidget)
+from PyQt5.QtWidgets import (QComboBox, QDialog, QFileDialog, QGroupBox, QHBoxLayout, QLabel, QMessageBox, QPushButton,
+                             QSlider, QStyle, QToolButton, QVBoxLayout, QWidget)
 
 from src.utils.logger_config import setup_logger
 
@@ -486,11 +488,18 @@ class SoundSettingsDialog(QDialog):
         # Убираем стандартную рамку, делаем фон полупрозрачным для скруглённых углов
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
-        self.setFixedSize(400, 266)
+        self.setFixedSize(410, 460)
 
         self.sound_manager = sound_manager
         self.original_volume = sound_manager.get_volume()
         self.original_device = sound_manager.current_device
+        self.original_custom_sounds = dict(sound_manager.custom_sounds)
+        self._accepted = False
+
+        if parent and hasattr(parent, "region_combo"):
+            self.current_region = parent.region_combo.currentText()
+        else:
+            self.current_region = sound_manager.current_region
 
         # Внешний слой с отступом в 1px для имитации тонкой рамки
         outer_layout = QVBoxLayout(self)
@@ -521,7 +530,7 @@ class SoundSettingsDialog(QDialog):
         self.title_bar.about_btn.hide()
         self.title_bar.minimize_btn.hide()
         self.title_bar.close_btn.clicked.disconnect()
-        self.title_bar.close_btn.clicked.connect(self.close)
+        self.title_bar.close_btn.clicked.connect(self.reject)
         main_layout.addWidget(self.title_bar)
 
         # Контентная область
@@ -549,37 +558,37 @@ class SoundSettingsDialog(QDialog):
         self.volume_slider.setTracking(True)
         self.volume_slider.setSingleStep(1)
         self.volume_slider.setPageStep(5)
-        self.volume_slider.setMinimumHeight(36)
+        self.volume_slider.setMinimumHeight(30)
 
         self.volume_slider.setStyleSheet(
             """
             QSlider::groove:horizontal {
-                height: 10px;
+                height: 8px;
                 background: #32343a;
-                border-radius: 5px;
+                border-radius: 4px;
             }
             QSlider::sub-page:horizontal {
-                border-radius: 5px;
+                border-radius: 4px;
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                     stop:0 #5d7aff, stop:1 #8ab2ff);
             }
             QSlider::add-page:horizontal {
                 background: #2b2d31;
-                border-radius: 5px;
+                border-radius: 4px;
             }
             QSlider::handle:horizontal {
                 background: #ffffff;
-                border: 4px solid #4d6bfe;
-                width: 22px;
-                height: 22px;
-                border-radius: 11px;
-                margin: -6px 0;
+                border: 3px solid #4d6bfe;
+                width: 18px;
+                height: 18px;
+                border-radius: 9px;
+                margin: -5px 0;
             }
             QSlider::handle:horizontal:hover {
-                border: 4px solid #7aa2f7;
+                border: 3px solid #7aa2f7;
             }
             QSlider::handle:horizontal:pressed {
-                border: 4px solid #3a5af5;
+                border: 3px solid #3a5af5;
             }
         """
         )
@@ -619,6 +628,73 @@ class SoundSettingsDialog(QDialog):
         self.device_combo.currentIndexChanged.connect(self.on_device_changed)
         dev_layout.addWidget(self.device_combo)
         content_layout.addLayout(dev_layout)
+
+        # Блок пользовательского звука для текущего региона
+        sound_file_container = QWidget()
+        sound_file_container.setStyleSheet("background-color: #32343a; border-radius: 8px;")
+        sound_file_layout = QVBoxLayout(sound_file_container)
+        sound_file_layout.setContentsMargins(12, 10, 12, 10)
+        sound_file_layout.setSpacing(8)
+
+        region_label = QLabel(f"Сигнал для региона: {self.current_region}")
+        region_label.setStyleSheet("color: #f8faff; font-weight: bold;")
+        sound_file_layout.addWidget(region_label)
+
+        self.custom_sound_path_label = QLabel()
+        self.custom_sound_path_label.setWordWrap(True)
+        self.custom_sound_path_label.setStyleSheet(
+            """
+            color: #b5b7be;
+            background-color: #2b2d31;
+            border-radius: 6px;
+            padding: 8px;
+            """
+        )
+        sound_file_layout.addWidget(self.custom_sound_path_label)
+
+        sound_buttons_layout = QHBoxLayout()
+        sound_buttons_layout.setSpacing(8)
+
+        self.choose_sound_btn = QPushButton("Выбрать звук")
+        self.choose_sound_btn.setStyleSheet(
+            """
+            QPushButton {
+                background-color: #3a3c42;
+                color: #f8faff;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #4d6bfe;
+            }
+            """
+        )
+        self.choose_sound_btn.clicked.connect(self.choose_custom_sound)
+        sound_buttons_layout.addWidget(self.choose_sound_btn)
+
+        self.reset_sound_btn = QPushButton("Сбросить")
+        self.reset_sound_btn.setStyleSheet(
+            """
+            QPushButton {
+                background-color: #3a3c42;
+                color: #f8faff;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #ff6b6b;
+            }
+            """
+        )
+        self.reset_sound_btn.clicked.connect(self.reset_custom_sound)
+        sound_buttons_layout.addWidget(self.reset_sound_btn)
+
+        sound_file_layout.addLayout(sound_buttons_layout)
+        content_layout.addWidget(sound_file_container)
 
         # Кнопка тестового сигнала
         test_btn = QPushButton("Тестовый сигнал")
@@ -663,6 +739,7 @@ class SoundSettingsDialog(QDialog):
             self.move(parent_rect.center() - self.rect().center())
 
         self.update_volume_icon(self.volume_slider.value())
+        self.update_custom_sound_label()
 
     def update_volume_icon(self, value):
         """
@@ -710,6 +787,97 @@ class SoundSettingsDialog(QDialog):
             else:
                 self.device_combo.setCurrentIndex(0)
 
+    def update_custom_sound_label(self):
+        """
+        Обновляет подпись с информацией о пользовательском звуке
+        для текущего выбранного региона.
+
+        :return: None.
+        """
+        current_path = self.sound_manager.custom_sounds.get(self.current_region, "").strip()
+
+        if current_path:
+            path_obj = Path(current_path)
+            self.custom_sound_path_label.setText(f"Пользовательский файл:\n{path_obj.name}")
+            self.custom_sound_path_label.setToolTip(current_path)
+            self.reset_sound_btn.setEnabled(True)
+        else:
+            builtin_name = self.sound_manager.get_builtin_sound_filename()
+            self.custom_sound_path_label.setText(f"Стандартный встроенный звук:\n{builtin_name}")
+            self.custom_sound_path_label.setToolTip("")
+            self.reset_sound_btn.setEnabled(False)
+
+    def choose_custom_sound(self):
+        """
+        Открывает диалог выбора пользовательского аудиофайла
+        для текущего региона и применяет его.
+
+        :return: None.
+        """
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            f"Выбор звука для региона '{self.current_region}'",
+            "",
+            "Аудиофайлы (*.mp3 *.wav);;MP3 (*.mp3);;WAV (*.wav)",
+        )
+
+        if not file_path:
+            return
+
+        self.sound_manager.set_custom_sound(self.current_region, file_path)
+        self.update_custom_sound_label()
+
+    def reset_custom_sound(self):
+        """
+        Сбрасывает пользовательский звук текущего региона
+        и возвращает встроенный стандартный файл.
+
+        :return: None.
+        """
+        self.sound_manager.clear_custom_sound(self.current_region)
+        self.update_custom_sound_label()
+
+    def cleanup_unused_custom_sound_files(self):
+        """
+        Удаляет старые пользовательские файлы после подтверждения изменений,
+        если они больше не используются в текущих настройках.
+
+        :return: None.
+        """
+        current_paths = {
+            Path(path).resolve() for path in self.sound_manager.custom_sounds.values() if path and Path(path).exists()
+        }
+
+        user_sounds_dir = self.sound_manager.get_user_sounds_dir().resolve()
+
+        for old_path in self.original_custom_sounds.values():
+            if not old_path:
+                continue
+
+            old_file = Path(old_path)
+            try:
+                resolved_old_file = old_file.resolve()
+            except Exception:
+                continue
+
+            if resolved_old_file in current_paths:
+                continue
+
+            if not old_file.exists() or not old_file.is_file():
+                continue
+
+            if user_sounds_dir not in resolved_old_file.parents:
+                continue
+
+            try:
+                old_file.unlink()
+                logger.info(f"Удалён неиспользуемый пользовательский звук: {old_file}")
+            except Exception as e:
+                logger.error(
+                    f"Ошибка при удалении неиспользуемого пользовательского звука '{old_file}': {e}",
+                    exc_info=True,
+                )
+
     def on_volume_changed(self, value):
         """Обрабатывает изменение громкости слайдером."""
         self.volume_label.setText(f"{value}%")
@@ -745,11 +913,47 @@ class SoundSettingsDialog(QDialog):
         self.sound_manager.test_sound()
 
     def accept(self):
-        """Подтверждение изменений — закрываем диалог, сохраняя настройки."""
+        """
+        Подтверждает изменения, удаляет старые неиспользуемые
+        пользовательские звуки и закрывает диалог.
+
+        :return: None.
+        """
+        self.cleanup_unused_custom_sound_files()
+        self._accepted = True
         super().accept()
 
-    def reject(self):
-        """Отмена — возвращаем исходные громкость и устройство."""
+    def rollback_changes(self):
+        """
+        Возвращает исходные громкость, устройство вывода
+        и пользовательские звуки по регионам.
+
+        :return: None.
+        """
         self.sound_manager.set_volume(self.original_volume)
         self.sound_manager.set_device_by_index(self.original_device)
+        self.sound_manager.custom_sounds = dict(self.original_custom_sounds)
+        self.sound_manager.load_alarm_sound()
+        self.update_custom_sound_label()
+
+    def reject(self):
+        """
+        Отменяет изменения и закрывает диалог с откатом
+        всех временно применённых параметров.
+
+        :return: None.
+        """
+        self.rollback_changes()
         super().reject()
+
+    def closeEvent(self, event):
+        """
+        При закрытии окна без подтверждения откатывает
+        все временные изменения.
+
+        :param event: Событие закрытия окна.
+        :return: None.
+        """
+        if not self._accepted:
+            self.rollback_changes()
+        super().closeEvent(event)

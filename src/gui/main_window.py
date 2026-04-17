@@ -83,6 +83,9 @@ class MainWindow(QMainWindow):
             logger.debug(f"Загрузка настроек из файла: {self.env_path}")
             self.current_settings = load_env_settings(self.env_path)
 
+            # Загружаем пользовательские звуки из настроек
+            sound_manager.load_custom_sounds_from_settings(self.current_settings)
+
             # Инициализация звукового менеджера с сохранёнными параметрами
             current_region = self.current_settings.get("REGION", "Волга")
             sound_manager.set_region(current_region)
@@ -607,7 +610,10 @@ class MainWindow(QMainWindow):
     def save_settings(self):
         """
         Сохраняет текущие значения всех настроек в .env файл.
-        Использует функцию save_settings из utils.settings. Если изменения были, выводит сообщение в журнал.
+        Использует функцию save_settings из utils.settings. Если изменения были,
+        выводит сообщение в журнал.
+
+        :return: None.
         """
         logger.debug("Попытка сохранения настроек")
         try:
@@ -622,15 +628,20 @@ class MainWindow(QMainWindow):
                 "MONITOR_HEIGHT": str(self.monitor_thread.monitor["height"]),
                 "REGION": self.region_combo.currentText(),
                 "SOUND_VOLUME": str(int(sound_manager.get_volume() * 100)),
-                "AUDIO_DEVICE": str(sound_manager.current_device) if sound_manager.current_device is not None else "",
+                "AUDIO_DEVICE": "" if sound_manager.current_device is None else str(sound_manager.current_device),
+                "CUSTOM_SOUND_VOLGA": sound_manager.custom_sounds.get("Волга", ""),
+                "CUSTOM_SOUND_SOUTH": sound_manager.custom_sounds.get("Юг", ""),
+                "CUSTOM_SOUND_NORTHWEST": sound_manager.custom_sounds.get("Северо-Запад", ""),
+                "CUSTOM_SOUND_CENTER": sound_manager.custom_sounds.get("Центр", ""),
+                "CUSTOM_SOUND_MIMO": sound_manager.custom_sounds.get("Москва", ""),
             }
 
             if save_settings(self.env_path, new_settings):
-                self.current_settings = new_settings
+                self.current_settings.update(new_settings)
                 logger.info("Настройки успешно сохранены")
                 self.update_log("Настройки сохранены")
             else:
-                logger.warning("Настройки не были изменены")
+                logger.debug("Изменений в настройках не обнаружено")
 
         except Exception as e:
             logger.error(f"Ошибка при сохранении настроек: {str(e)}", exc_info=True)

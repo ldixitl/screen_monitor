@@ -8,11 +8,10 @@ def load_env_settings(env_path: str) -> dict:
     Загружает настройки из .env файла. Если файл отсутствует, создаёт его
     с набором значений по умолчанию.
 
-    :param env_path: Путь к файлу .env (строка).
+    :param env_path: Путь к файлу .env.
     :return: Словарь с загруженными настройками.
     """
     if not os.path.exists(env_path):
-        # Значения по умолчанию для первого запуска
         default_settings = {
             "INTERVAL": "10",
             "TELEGRAM_ENABLED": "False",
@@ -25,11 +24,15 @@ def load_env_settings(env_path: str) -> dict:
             "REGION": "Волга",
             "SOUND_VOLUME": "50",
             "AUDIO_DEVICE": "",
+            "CUSTOM_SOUND_VOLGA": "",
+            "CUSTOM_SOUND_SOUTH": "",
+            "CUSTOM_SOUND_NORTHWEST": "",
+            "CUSTOM_SOUND_CENTER": "",
+            "CUSTOM_SOUND_MIMO": "",
         }
         for key, value in default_settings.items():
             set_key(env_path, key, value)
 
-    # Загружаем переменные окружения из файла
     load_dotenv(env_path)
     return dotenv_values(env_path)
 
