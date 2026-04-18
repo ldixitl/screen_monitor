@@ -1,6 +1,6 @@
 import time
 
-from PyQt5.QtCore import QPropertyAnimation, Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QColor, QFont, QIcon, QPalette
 from PyQt5.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
                              QMainWindow, QPushButton, QScrollArea, QSizePolicy, QSpinBox, QStyle, QVBoxLayout,
@@ -77,12 +77,14 @@ class MainWindow(QMainWindow):
 
             # Переменные для состояния
             self.telegram_enabled = False
-            self.notifications = []  # список активных всплывающих уведомлений
 
             # Загружаем настройки из .env файла
             self.env_path = ".env"
             logger.debug(f"Загрузка настроек из файла: {self.env_path}")
             self.current_settings = load_env_settings(self.env_path)
+
+            # Загружаем пользовательские звуки из настроек
+            sound_manager.load_custom_sounds_from_settings(self.current_settings)
 
             # Инициализация звукового менеджера с сохранёнными параметрами
             current_region = self.current_settings.get("REGION", "Волга")
@@ -256,7 +258,18 @@ class MainWindow(QMainWindow):
             region_row = QHBoxLayout()
             region_row.addWidget(QLabel("Регион:"))
             self.region_combo = QComboBox()
-            self.region_combo.addItems(["Волга", "Юг", "Северо-Запад", "Центр", "Москва"])
+            self.region_combo.addItems(
+                [
+                    "Волга",
+                    "Юг",
+                    "Северо-Запад",
+                    "Центр",
+                    "Москва",
+                    "Дальний Восток",
+                    "Сибирь",
+                    "Урал",
+                ]
+            )
             current_region = self.current_settings.get("REGION", "Волга")
             self.region_combo.setCurrentText(current_region)
             self.region_combo.currentTextChanged.connect(self.on_region_changed)
@@ -608,7 +621,10 @@ class MainWindow(QMainWindow):
     def save_settings(self):
         """
         Сохраняет текущие значения всех настроек в .env файл.
-        Использует функцию save_settings из utils.settings. Если изменения были, выводит сообщение в журнал.
+        Использует функцию save_settings из utils.settings. Если изменения были,
+        выводит сообщение в журнал.
+
+        :return: None.
         """
         logger.debug("Попытка сохранения настроек")
         try:
@@ -623,19 +639,54 @@ class MainWindow(QMainWindow):
                 "MONITOR_HEIGHT": str(self.monitor_thread.monitor["height"]),
                 "REGION": self.region_combo.currentText(),
                 "SOUND_VOLUME": str(int(sound_manager.get_volume() * 100)),
-                "AUDIO_DEVICE": str(sound_manager.current_device) if sound_manager.current_device is not None else "",
+                "AUDIO_DEVICE": "" if sound_manager.current_device is None else str(sound_manager.current_device),
+                "CUSTOM_SOUND_VOLGA": sound_manager.custom_sounds.get("Волга", ""),
+                "CUSTOM_SOUND_SOUTH": sound_manager.custom_sounds.get("Юг", ""),
+                "CUSTOM_SOUND_NORTHWEST": sound_manager.custom_sounds.get("Северо-Запад", ""),
+                "CUSTOM_SOUND_CENTER": sound_manager.custom_sounds.get("Центр", ""),
+                "CUSTOM_SOUND_MIMO": sound_manager.custom_sounds.get("Москва", ""),
+                "CUSTOM_SOUND_EAST": sound_manager.custom_sounds.get("Дальний Восток", ""),
+                "CUSTOM_SOUND_SIBERIA": sound_manager.custom_sounds.get("Сибирь", ""),
+                "CUSTOM_SOUND_URAL": sound_manager.custom_sounds.get("Урал", ""),
             }
 
             if save_settings(self.env_path, new_settings):
-                self.current_settings = new_settings
+                self.current_settings.update(new_settings)
                 logger.info("Настройки успешно сохранены")
                 self.update_log("Настройки сохранены")
             else:
-                logger.warning("Настройки не были изменены")
+                logger.debug("Изменений в настройках не обнаружено")
 
         except Exception as e:
             logger.error(f"Ошибка при сохранении настроек: {str(e)}", exc_info=True)
             self.update_log("⛔ Ошибка при сохранении настроек")
+
+    def show_incident_notification(self, message):
+        """
+        Отображает всплывающее уведомление об обнаруженной аварии.
+        Уведомление показывается только если включены Windows-уведомления.
+        """
+        if not self.windows_checkbox.isChecked():
+            logger.debug("Windows-уведомления отключены, пропускаем показ")
+            return
+
+        logger.debug(f"show_incident_notification: {message[:50]}...")
+
+        # Убираем из сообщения информацию о площади (всё после первой открывающей скобки)
+        clean_message = message.split("(")[0].strip()
+        duration = self.notify_duration_spin.value()
+
+        notification = NotificationWidget(clean_message, self, duration=duration, title="Обнаружена авария")
+
+        # Позиционируем в правом нижнем углу экрана
+        screen_geo = QApplication.primaryScreen().availableGeometry()
+        notification.move(
+            screen_geo.width() - notification.width() - 20, screen_geo.height() - notification.height() - 20
+        )
+        notification.show()
+        notification.raise_()
+        notification.activateWindow()
+        logger.debug("Уведомление об аварии показано")
 
     def test_telegram(self):
         """
@@ -720,42 +771,38 @@ class MainWindow(QMainWindow):
             from PyQt5.QtWidgets import QDialog, QLabel, QVBoxLayout
 
             from src.gui.widgets import StyledButton
+            from src.utils.screen_utils import get_physical_area
 
             monitor_area = self.monitor_thread.monitor
+            # Получаем физические координаты для захвата
+            physical_area = get_physical_area(monitor_area)
 
             with mss() as sct:
-                monitors = sct.monitors[1:]  # реальные мониторы
-
-                # Корректируем координаты с учётом смещения самого левого монитора
-                min_left = min(m["left"] for m in monitors)
-                adjusted_area = {
-                    "left": monitor_area["left"] + min_left,
-                    "top": monitor_area["top"],
-                    "width": monitor_area["width"],
-                    "height": monitor_area["height"],
-                }
-
+                monitors = sct.monitors[1:]
                 # Определяем, какому монитору принадлежит скорректированная область
                 target_monitor = None
                 for monitor in monitors:
                     if (
-                        adjusted_area["left"] >= monitor["left"]
-                        and adjusted_area["top"] >= monitor["top"]
-                        and adjusted_area["left"] + adjusted_area["width"] <= monitor["left"] + monitor["width"]
-                        and adjusted_area["top"] + adjusted_area["height"] <= monitor["top"] + monitor["height"]
+                        physical_area["left"] >= monitor["left"]
+                        and physical_area["top"] >= monitor["top"]
+                        and physical_area["left"] + physical_area["width"] <= monitor["left"] + monitor["width"]
+                        and physical_area["top"] + physical_area["height"] <= monitor["top"] + monitor["height"]
                     ):
                         target_monitor = monitor
                         break
-
                 if not target_monitor:
                     target_monitor = monitors[0]
 
-                screenshot = sct.grab(adjusted_area)
+                screenshot = sct.grab(physical_area)
                 img = Image.frombytes("RGB", screenshot.size, screenshot.rgb)
 
             # Преобразуем PIL Image в QPixmap
             qimage = ImageQt(img).copy()
             pixmap = QPixmap.fromImage(qimage)
+
+            # Получаем масштаб экрана и логические размеры области
+            logical_width = monitor_area["width"]
+            logical_height = monitor_area["height"]
 
             # Создаём диалог предпросмотра
             preview_dialog = QDialog(self)
@@ -777,18 +824,20 @@ class MainWindow(QMainWindow):
 
             preview_dialog.setWindowFlags(preview_dialog.windowFlags() | Qt.WindowMinimizeButtonHint)
 
-            # Размер окна подстраиваем под размер изображения + отступы
-            window_width = pixmap.width() + 40
-            window_height = pixmap.height() + 200
+            # Размер окна подстраиваем под логический размер изображения + отступы
+            window_width = logical_width + 40
+            window_height = logical_height + 200
             preview_dialog.setFixedSize(window_width, window_height)
 
             layout = QVBoxLayout(preview_dialog)
             layout.setContentsMargins(20, 20, 20, 20)
             layout.setSpacing(15)
 
-            # Изображение
+            # Изображение – фиксированный логический размер с масштабированием
             image_label = QLabel()
+            image_label.setFixedSize(logical_width, logical_height)
             image_label.setPixmap(pixmap)
+            image_label.setScaledContents(True)  # масштабируем под размер label'а
             image_label.setAlignment(Qt.AlignCenter)
             image_label.setStyleSheet("border: 2px solid #4d6bfe; border-radius: 8px;")
             layout.addWidget(image_label)
@@ -797,7 +846,7 @@ class MainWindow(QMainWindow):
             info_label = QLabel(
                 f"<b>Выбранная область:</b> {monitor_area['width']}x{monitor_area['height']} "
                 f"({monitor_area['left']}, {monitor_area['top']})<br>"
-                f"<b>С учётом смещения:</b> {adjusted_area['left']}, {adjusted_area['top']}<br>"
+                f"<b>С учётом смещения:</b> {physical_area['left']}, {physical_area['top']}<br>"
                 f"<b>Монитор:</b> {target_monitor['width']}x{target_monitor['height']} "
                 f"({target_monitor['left']}, {target_monitor['top']})"
             )
@@ -892,65 +941,6 @@ class MainWindow(QMainWindow):
         self.next_check_time = time.time() + self.monitor_thread.check_interval
         self.update_timer_display()
 
-    def show_telegram_notification(self, message):
-        """
-        Отображает всплывающее уведомление о том, что сообщение было отправлено в Telegram.
-        Уведомление показывается только если включены Windows-уведомления.
-        """
-        try:
-            if not self.windows_checkbox.isChecked():
-                logger.debug("Windows-уведомления отключены, пропускаем показ")
-                return
-
-            logger.debug(f"show_telegram_notification вызван: {message[:50]}...")
-
-            duration = self.notify_duration_spin.value()
-            notification = NotificationWidget(
-                f"{message[:120]}{'...' if len(message) > 120 else ''}", self, duration=duration
-            )
-
-            # Позиционируем в правом нижнем углу экрана
-            screen_geo = QApplication.primaryScreen().availableGeometry()
-            notification.move(
-                screen_geo.width() - notification.width() - 20, screen_geo.height() - notification.height() - 20
-            )
-
-            notification.show()
-            notification.raise_()
-            notification.activateWindow()
-            self.animate_notification(notification)
-
-            logger.debug("Уведомление показано поверх всех окон")
-
-            self.notifications.append(notification)
-            notification.destroyed.connect(lambda: self.remove_notification(notification))
-
-        except Exception as e:
-            logger.error(f"Ошибка при показе уведомления: {str(e)}", exc_info=True)
-
-    def animate_notification(self, notification):
-        """
-        Запускает простую анимацию мигания для привлечения внимания к уведомлению.
-        """
-        try:
-            animation = QPropertyAnimation(notification, b"windowOpacity")
-            animation.setDuration(1000)
-            animation.setStartValue(1.0)
-            animation.setKeyValueAt(0.5, 0.5)
-            animation.setEndValue(1.0)
-            animation.setLoopCount(2)  # два раза мигнёт
-            animation.start()
-        except Exception as e:
-            logger.error(f"Ошибка анимации: {str(e)}")
-
-    def remove_notification(self, notification):
-        """
-        Удаляет уведомление из внутреннего списка после его закрытия.
-        """
-        if notification in self.notifications:
-            self.notifications.remove(notification)
-            logger.debug("Уведомление удалено из списка")
-
     def open_sound_settings(self):
         """
         Открывает диалог настройки звука (SoundSettingsDialog).
@@ -996,18 +986,20 @@ class MainWindow(QMainWindow):
                 lambda: self.scroll_area.verticalScrollBar().setValue(self.scroll_area.verticalScrollBar().maximum()),
             )
 
-            # Если это сообщение о новой аварии — отправляем Telegram
+            # Если это сообщение о новой аварии
             if "🔴 Обнаружена новая авария" in message:
+                # Показываем всплывающее уведомление (если включены Windows-уведомления)
+                self.show_incident_notification(message)
+
+                # Отправляем Telegram, если включено
                 if self.telegram_checkbox.isChecked():
                     chat_id = self.telegram_chat_input.text().strip()
                     if chat_id:
                         logger.debug(f"Отправка сообщения в Telegram: {message}")
                         result = send_telegram_message(chat_id, message)
                         logger.debug(f"Результат отправки: {result}")
-                        if "успешно" in result.lower() or "отправлено" in result.lower():
-                            self.show_telegram_notification(message)
-                        else:
-                            logger.warning(f"Не удалось отправить сообщение: {result}")
+                        # Уведомление об отправке больше не показываем (можно убрать или оставить отдельно)
+                        # если хотите оставить уведомление об отправке, создайте другой метод с другим заголовком
                     else:
                         logger.debug("Не указан chat_id для Telegram")
                 else:
