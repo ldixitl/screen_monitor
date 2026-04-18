@@ -220,6 +220,9 @@ class TitleBar(QWidget):
                 <li>Северо-Запад</li>
                 <li>Центр</li>
                 <li>Москва</li>
+                <li>Дальний Восток</li>
+                <li>Сибирь</li>
+                <li>Урал</li>
             </ul>
 
             <p><b>Для получения Telegram ID:</b><br>

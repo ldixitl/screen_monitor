@@ -29,6 +29,9 @@ def load_env_settings(env_path: str) -> dict:
             "CUSTOM_SOUND_NORTHWEST": "",
             "CUSTOM_SOUND_CENTER": "",
             "CUSTOM_SOUND_MIMO": "",
+            "CUSTOM_SOUND_EAST": "",
+            "CUSTOM_SOUND_SIBERIA": "",
+            "CUSTOM_SOUND_URAL": "",
         }
         for key, value in default_settings.items():
             set_key(env_path, key, value)

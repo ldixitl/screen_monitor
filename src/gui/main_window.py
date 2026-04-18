@@ -258,7 +258,18 @@ class MainWindow(QMainWindow):
             region_row = QHBoxLayout()
             region_row.addWidget(QLabel("Регион:"))
             self.region_combo = QComboBox()
-            self.region_combo.addItems(["Волга", "Юг", "Северо-Запад", "Центр", "Москва"])
+            self.region_combo.addItems(
+                [
+                    "Волга",
+                    "Юг",
+                    "Северо-Запад",
+                    "Центр",
+                    "Москва",
+                    "Дальний Восток",
+                    "Сибирь",
+                    "Урал",
+                ]
+            )
             current_region = self.current_settings.get("REGION", "Волга")
             self.region_combo.setCurrentText(current_region)
             self.region_combo.currentTextChanged.connect(self.on_region_changed)
@@ -634,6 +645,9 @@ class MainWindow(QMainWindow):
                 "CUSTOM_SOUND_NORTHWEST": sound_manager.custom_sounds.get("Северо-Запад", ""),
                 "CUSTOM_SOUND_CENTER": sound_manager.custom_sounds.get("Центр", ""),
                 "CUSTOM_SOUND_MIMO": sound_manager.custom_sounds.get("Москва", ""),
+                "CUSTOM_SOUND_EAST": sound_manager.custom_sounds.get("Дальний Восток", ""),
+                "CUSTOM_SOUND_SIBERIA": sound_manager.custom_sounds.get("Сибирь", ""),
+                "CUSTOM_SOUND_URAL": sound_manager.custom_sounds.get("Урал", ""),
             }
 
             if save_settings(self.env_path, new_settings):

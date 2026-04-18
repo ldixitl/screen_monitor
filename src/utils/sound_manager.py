@@ -36,6 +36,9 @@ class SoundManager:
             "Северо-Запад": "",
             "Центр": "",
             "Москва": "",
+            "Дальний Восток": "",
+            "Сибирь": "",
+            "Урал": "",
         }
 
     @staticmethod
@@ -105,6 +108,9 @@ class SoundManager:
             "Северо-Запад": settings.get("CUSTOM_SOUND_NORTHWEST", "") or "",
             "Центр": settings.get("CUSTOM_SOUND_CENTER", "") or "",
             "Москва": settings.get("CUSTOM_SOUND_MIMO", "") or "",
+            "Дальний Восток": settings.get("CUSTOM_SOUND_EAST", "") or "",
+            "Сибирь": settings.get("CUSTOM_SOUND_SIBERIA", "") or "",
+            "Урал": settings.get("CUSTOM_SOUND_URAL", "") or "",
         }
         logger.debug(f"Пользовательские звуки загружены: {self.custom_sounds}")
 
@@ -197,6 +203,9 @@ class SoundManager:
             "Северо-Запад": "north_alarm.mp3",
             "Центр": "centre_alarm.mp3",
             "Москва": "mimo_alarm.mp3",
+            "Дальний Восток": "east_alarm.mp3",
+            "Сибирь": "siberia_alarm.mp3",
+            "Урал": "ural_alarm.mp3",
         }
         return sound_mapping.get(self.current_region, "volga_alarm.mp3")
 
@@ -224,6 +233,9 @@ class SoundManager:
             "Северо-Запад": "northwest",
             "Центр": "center",
             "Москва": "mimo",
+            "Дальний Восток": "east",
+            "Сибирь": "siberia",
+            "Урал": "ural",
         }
         return mapping.get(region_name, "custom_sound")
 
