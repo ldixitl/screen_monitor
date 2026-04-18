@@ -191,7 +191,7 @@ class TitleBar(QWidget):
             <div style="font-family: 'Segoe UI';">
             <h2 style="color: #4d6bfe; text-align: center;">Screen Monitor</h2>
 
-            <p><b>Версия:</b> 1.1.0</p>
+            <p><b>Версия:</b> 1.2.0</p>
             <p><b>Описание:</b> Программа для мониторинга экрана и обнаружения аварийных ситуаций в системах БТИ.</p>
 
             <h3>Основные функции:</h3>
